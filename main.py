@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 import os
 import json
 import time
@@ -11,6 +12,7 @@ from deemix.app.queuemanager import logger
 
 def setup():
     if not os.path.exists("deemix_db/library.json"):
+        os.mkdir('deemix_db')
         f = open("deemix_db/library.json", "w")
         f.write('{}')
         f.close()
@@ -81,7 +83,7 @@ def wait_to_tomorrow():
 
 
 if __name__ == '__main__':
-    time.sleep(9000)
+    # time.sleep(9000)
     setup()
     urls = os.environ['urls']
     urls_list = urls.split(',')
