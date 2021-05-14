@@ -81,7 +81,6 @@ def wait_to_tomorrow():
 
 
 if __name__ == '__main__':
-    time.sleep(9000)
     setup()
     urls = os.environ['urls']
     urls_list = urls.split(',')
