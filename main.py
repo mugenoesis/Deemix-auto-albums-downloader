@@ -1,105 +1,107 @@
 import os
-import json
+import signal
+import subprocess
 import time
-from datetime import datetime, timedelta
+from threading import Thread
+from time import sleep
+from gevent.pywsgi import WSGIServer
+import requests
+from plexapi.server import PlexServer
+from flask import Flask, render_template
+import logging
 
-import deemix.app.cli as cli
-import deezer
-from html.parser import HTMLParser
-from deemix.app.queuemanager import logger
-
-
-def setup():
-    if not os.path.exists("deemix_db/library.json"):
-        f = open("deemix_db/library.json", "w")
-        f.write('{}')
-        f.close()
-
-
-def add_to_lib(id):
-    with open('deemix_db/library.json') as json_file:
-        lib = json.load(json_file)
-        for entries in lib:
-            if lib[entries] == id:
-                return False
-        lib[len(lib) + 1] = id
-    with open('deemix_db/library.json', 'w+') as outfile:
-        json.dump(lib, outfile)
-        return True
+app = Flask(__name__)
+log = logging.getLogger('werkzeug')
+log.disabled = True
+app.logger.disabled = True
+album_image = ''
 
 
-def album_id_stripper(albums_dict):
-    id_list = []
-    for item in albums_dict['sections'][0]['items']:
-        id_list.append(item['id'])
-    return id_list
-
-
-class Parse(HTMLParser):
+class AlbumDisplay(Thread):
 
     def __init__(self):
-        super().__init__()
-        self.reset()
-        self.found_script = False
-        self.albums = {}
+        Thread.__init__(self)
+        self.daemon = True
+        self.start()
 
-    def handle_starttag(self, tag, attrs):
-        if tag == 'script':
-            self.found_script = True
+    def run(self):
+        baseurl = ''
+        token = ''
+        player_name = ''
+        previous_album_title = ''
 
-    def handle_data(self, data):
-        if self.found_script:
-            try:
-                albums_dict = json.loads(data.strip('window.__DZR_APP_STATE__ = '))
-                self.albums = albums_dict
-            except Exception as e:
-                pass
-            self.found_script = False
+        while True:
+
+            plex = PlexServer(baseurl, token)
+            sessions = plex.sessions()
+            for session in sessions:
+                for player in session.players:
+                    if player.title == player_name:
+                        if previous_album_title != session.parentTitle:
+                            previous_album_title = session.parentTitle
+                            x = requests.get(session.thumbUrl)
+
+                            if not os.path.isdir('static'):
+                                os.mkdir('static')
+
+                            for filename in os.listdir('static/'):
+                                if filename.startswith('album'):  # not to remove other images
+                                    os.remove('static/' + filename)
+
+                            file_name = f'static/album{str(time.time())}.jpg'
+                            album_image = f'album{str(time.time())}.jpg'
+                            print(album_image)
+                            open(file_name, 'wb').write(x.content)
+
+                            f = open("templates/album.html", "r")
+                            test = f.read()
+
+                            f = open("templates/album.html", "w")
+                            f.write(test)
+                            f.close()
+            sleep(1)
 
 
-def api_call_test(url, deezer_sesh):
-    result = deezer_sesh.get(
-        url,
-        headers=deezer_headers,
-        timeout=30
-    )
-    json_ = result.text
-    testParser = Parse()
-    testParser.feed(json_)
-    albums = testParser.albums
-    return album_id_stripper(albums)
+class FlaskThread(Thread):
+
+    def __init__(self):
+        Thread.__init__(self)
+        self.daemon = True
+        self.start()
+
+    def run(self):
+        http_server = WSGIServer(('localhost', 5000), app)
+        http_server.serve_forever()
 
 
-def wait_to_tomorrow():
-    """Wait to tommorow 8:00 am"""
+@app.route('/encode', methods=['POST', 'GET'])
+def encode():
+    subprocess.call(['./alac_convert.sh'])
+    return 200
 
-    tomorrow = datetime.replace(datetime.now() + timedelta(days=1),
-                                hour=8, minute=0, second=0)
-    delta = tomorrow - datetime.now()
-    logger.info(f'Check was completed at {datetime.now()} sleeping for {delta}')
-    time.sleep(delta.seconds)
+
+@app.route('/', methods=['POST', 'GET'])
+def home():
+    return render_template('album.html', album=album_image)
+
+
+class ProgramStop:
+    stop = False
+
+    def __init__(self):
+        signal.signal(signal.SIGINT, self.exit_gracefully)
+        signal.signal(signal.SIGTERM, self.exit_gracefully)
+
+    def exit_gracefully(self, signum, frame):
+        self.stop = True
 
 
 if __name__ == '__main__':
-    setup()
-    urls = os.environ['urls']
-    urls_list = urls.split(',')
-    new = False
-    while True:
-        for url in urls_list:
-            test = cli.cli('./music', './')
-            test.login()
-            deezer_sesh = test.dz.session
-            deezer_headers = test.dz.http_headers
-            deezer_api = deezer.API(deezer_sesh, deezer_headers)
-            albums = api_call_test(url.strip(), deezer_sesh)
-            for album in albums:
-                new = False
-                if add_to_lib(id=album):
-                    new = True
-                    test.qm.addToQueue(dz=test.dz, url=f'https://www.deezer.com/en/album/{album}',
-                                       settings=test.set.settings, bitrate=os.environ['bitrate'])
-            if not new:
-                logger.info('No new albums found today')
-        wait_to_tomorrow()
+    #DeemixAutoDowloader.Downloader()
+    FlaskThread()
+    AlbumDisplay()
 
+    stop_me = ProgramStop()
+
+    while not stop_me.stop:
+        signal.pause()
