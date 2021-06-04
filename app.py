@@ -1,6 +1,5 @@
 import os
 import signal
-import subprocess
 import time
 from threading import Thread
 from time import sleep
@@ -9,12 +8,14 @@ import requests
 from plexapi.server import PlexServer
 from flask import Flask, render_template
 import logging
+import DeemixAutoDowloader
 
 app = Flask(__name__)
 log = logging.getLogger('werkzeug')
 log.disabled = True
 app.logger.disabled = True
 album_image = ''
+DeemixAutoDowloader.Downloader()
 
 
 class AlbumDisplay(Thread):
@@ -76,8 +77,8 @@ class FlaskThread(Thread):
 
 @app.route('/encode', methods=['POST', 'GET'])
 def encode():
-    subprocess.call(['./alac_convert.sh'])
-    return 200
+    DeemixAutoDowloader.q(DeemixAutoDowloader.StartEncoder())
+    return {'response': 200}
 
 
 @app.route('/', methods=['POST', 'GET'])
@@ -94,14 +95,3 @@ class ProgramStop:
 
     def exit_gracefully(self, signum, frame):
         self.stop = True
-
-
-if __name__ == '__main__':
-    #DeemixAutoDowloader.Downloader()
-    FlaskThread()
-    AlbumDisplay()
-
-    stop_me = ProgramStop()
-
-    while not stop_me.stop:
-        signal.pause()

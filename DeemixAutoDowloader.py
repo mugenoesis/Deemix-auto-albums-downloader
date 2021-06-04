@@ -1,4 +1,5 @@
 import os
+import queue
 import subprocess
 import json
 import time
@@ -9,6 +10,42 @@ import deemix.app.cli as cli
 import deezer
 from html.parser import HTMLParser
 from deemix.app.queuemanager import logger
+
+encode_q = queue.Queue(1)
+lock_encoder = None
+
+
+def edit_config():
+    f = open('config.json', )
+    config = json.load(f)
+    f.close()
+    config['createArtistFolder'] = True
+    config['albumNameTemplate'] = '%album%'
+    config['createSingleFolder'] = True
+    config['overwriteFile'] = 'e'
+    with open("config.json", "w") as outfile:
+        json.dump(config, outfile)
+
+
+def q(job):
+    global lock_encoder
+    if not encode_q.full() and lock_encoder is False:
+        lock_encoder = True
+        encode_q.put(job.start())
+
+
+class StartEncoder(Thread):
+
+    def __init__(self):
+        Thread.__init__(self)
+        self.daemon = True
+        self.run()
+
+    def run(self):
+        global lock_encoder
+        subprocess.call(['./alac_convert.sh'])
+        lock_encoder = False
+        return
 
 
 class Parse(HTMLParser):
@@ -47,6 +84,7 @@ class Downloader(Thread):
         while True:
             for url in urls_list:
                 test = cli.cli('./music', './')
+                edit_config()
                 test.login()
                 deezer_sesh = test.dz.session
                 deezer_headers = test.dz.http_headers
@@ -56,13 +94,16 @@ class Downloader(Thread):
                     new = False
                     if add_to_lib(id=album):
                         new = True
+                        global lock_encoder
+                        lock_encoder = True
                         test.qm.addToQueue(dz=test.dz, url=f'https://www.deezer.com/en/album/{album}',
                                            settings=test.set.settings, bitrate=os.environ['bitrate'])
+                        lock_encoder = False
+                        q(StartEncoder())
                 if not new:
                     logger.info('No new albums found today')
 
             logger.info('Running audio conversion')
-            output = subprocess.call(['./alac_convert.sh'])
             wait_to_tomorrow()
 
 
@@ -100,6 +141,8 @@ def add_to_lib(id):
 
 def setup():
     if not os.path.exists("deemix_db/library.json"):
+        if not os.path.exists('deemix_db/'):
+            os.system('mkdir deemix_db')
         f = open("deemix_db/library.json", "w")
         f.write('{}')
         f.close()
