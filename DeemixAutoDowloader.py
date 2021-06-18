@@ -70,6 +70,36 @@ class Parse(HTMLParser):
             self.found_script = False
 
 
+class ManualDownloader(Thread):
+
+    def __init__(self, albumId):
+        Thread.__init__(self)
+        self.daemon = True
+        self.albumId = albumId
+        self.start()
+
+    def run(self):
+        setup()
+        test = cli.cli('./music', './')
+        edit_config()
+        test.login()
+        deezer_sesh = test.dz.session
+        deezer_headers = test.dz.http_headers
+        deezer_api = deezer.API(deezer_sesh, deezer_headers)
+        if add_to_lib(id=self.albumId):
+            global lock_encoder
+            lock_encoder = True
+            try:
+                bitrate = os.environ['bitrate']
+            except Exception as e:
+                bitrate = 'flac'
+
+            test.qm.addToQueue(dz=test.dz, url=f'https://www.deezer.com/en/album/{self.albumId}',
+                               settings=test.set.settings, bitrate=bitrate)
+            lock_encoder = False
+            q(StartEncoder())
+
+
 class Downloader(Thread):
     def __init__(self):
         Thread.__init__(self)

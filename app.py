@@ -6,7 +6,7 @@ from time import sleep
 from gevent.pywsgi import WSGIServer
 import requests
 from plexapi.server import PlexServer
-from flask import Flask, render_template
+from flask import Flask, render_template, request
 import logging
 import DeemixAutoDowloader
 
@@ -73,6 +73,13 @@ class FlaskThread(Thread):
     def run(self):
         http_server = WSGIServer(('localhost', 5000), app)
         http_server.serve_forever()
+
+
+@app.route('/download', methods=['POST', 'GET'])
+def download():
+    album = request.args.get('album')
+    DeemixAutoDowloader.ManualDownloader(album)
+    return {'response': 200}
 
 
 @app.route('/encode', methods=['POST', 'GET'])
