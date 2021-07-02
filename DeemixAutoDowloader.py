@@ -5,11 +5,13 @@ import json
 import time
 from datetime import datetime, timedelta
 from threading import Thread
-
-import deemix.app.cli as cli
-import deezer
 from html.parser import HTMLParser
-from deemix.app.queuemanager import logger
+from deemix.downloader import Downloader as deezerDownload, logger
+from deemix.utils import getBitrateNumberFromText
+from deezer import Deezer
+from deemix import settings, generateDownloadObject
+
+from FileEncoding import encode_files
 
 encode_q = queue.Queue(1)
 lock_encoder = None
@@ -23,6 +25,7 @@ def edit_config():
     config['albumNameTemplate'] = '%album%'
     config['createSingleFolder'] = True
     config['overwriteFile'] = 'e'
+    config['downloadLocation'] = './music'
     with open("config.json", "w") as outfile:
         json.dump(config, outfile)
 
@@ -80,24 +83,24 @@ class ManualDownloader(Thread):
 
     def run(self):
         setup()
-        test = cli.cli('./music', './')
+        settings_local = settings.load('./')
         edit_config()
-        test.login()
-        deezer_sesh = test.dz.session
-        deezer_headers = test.dz.http_headers
-        deezer_api = deezer.API(deezer_sesh, deezer_headers)
-        if add_to_lib(id=self.albumId):
-            global lock_encoder
-            lock_encoder = True
-            try:
-                bitrate = os.environ['bitrate']
-            except Exception as e:
-                bitrate = 'flac'
+        try:
+            bitrate = getBitrateNumberFromText(os.environ['bitrate'])
+        except Exception as e:
+            bitrate = 9
 
-            test.qm.addToQueue(dz=test.dz, url=f'https://www.deezer.com/en/album/{self.albumId}',
-                               settings=test.set.settings, bitrate=bitrate)
-            lock_encoder = False
-            q(StartEncoder())
+        if add_to_lib(id=self.albumId):
+
+            deezer_obj = Deezer()
+            deezer_obj.login_via_arl(arl=os.environ['arl'])
+            link = 'https://www.deezer.com/en/album/' + str(self.albumId)
+            dlo = generateDownloadObject(dz=deezer_obj, link=link, bitrate=bitrate)
+            dwl = deezerDownload(dz=deezer_obj, downloadObject=dlo, settings=settings_local)
+            dwl.start()
+
+        encode_files()
+        print('done')
 
 
 class Downloader(Thread):
@@ -112,7 +115,7 @@ class Downloader(Thread):
         urls_list = urls.split(',')
         new = False
         while True:
-            for url in urls_list:
+            '''for url in urls_list:
                 test = cli.cli('./music', './')
                 edit_config()
                 test.login()
@@ -133,7 +136,7 @@ class Downloader(Thread):
                 if not new:
                     logger.info('No new albums found today')
 
-            logger.info('Running audio conversion')
+            logger.info('Running audio conversion')'''
             wait_to_tomorrow()
 
 

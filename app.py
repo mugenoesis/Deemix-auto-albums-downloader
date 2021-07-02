@@ -9,13 +9,14 @@ from plexapi.server import PlexServer
 from flask import Flask, render_template, request
 import logging
 import DeemixAutoDowloader
+import FileEncoding
 
 app = Flask(__name__)
 log = logging.getLogger('werkzeug')
 log.disabled = True
 app.logger.disabled = True
 album_image = ''
-DeemixAutoDowloader.Downloader()
+# DeemixAutoDowloader.Downloader()
 
 
 class AlbumDisplay(Thread):
@@ -84,7 +85,8 @@ def download():
 
 @app.route('/encode', methods=['POST', 'GET'])
 def encode():
-    DeemixAutoDowloader.q(DeemixAutoDowloader.StartEncoder())
+    # DeemixAutoDowloader.q(DeemixAutoDowloader.StartEncoder())
+    FileEncoding.encode_files()
     return {'response': 200}
 
 
