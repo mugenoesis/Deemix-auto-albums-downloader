@@ -110,33 +110,43 @@ class Downloader(Thread):
         self.start()
 
     def run(self):
+
         setup()
-        urls = os.environ['urls']
+
+        try:
+            urls = os.environ['urls']
+            run = True
+        except KeyError as k:
+            run = False
+
         urls_list = urls.split(',')
         new = False
-        while True:
-            '''for url in urls_list:
-                test = cli.cli('./music', './')
-                edit_config()
-                test.login()
-                deezer_sesh = test.dz.session
-                deezer_headers = test.dz.http_headers
-                deezer_api = deezer.API(deezer_sesh, deezer_headers)
+        while run:
+
+            settings_local = settings.load('./')
+
+            try:
+                bitrate = getBitrateNumberFromText(os.environ['bitrate'])
+            except Exception as e:
+                bitrate = 9
+
+            for url in urls_list:
+                deezer_obj = Deezer()
+                deezer_obj.login_via_arl(arl=os.environ['arl'])
+                deezer_sesh = deezer_obj.session
+                deezer_headers = deezer_obj.http_headers
                 albums = api_call_test(url.strip(), deezer_sesh, deezer_headers)
                 for album in albums:
                     new = False
-                    if add_to_lib(id=album):
+                    if add_to_lib(id=album, check=True):
                         new = True
-                        global lock_encoder
-                        lock_encoder = True
-                        test.qm.addToQueue(dz=test.dz, url=f'https://www.deezer.com/en/album/{album}',
-                                           settings=test.set.settings, bitrate=os.environ['bitrate'])
-                        lock_encoder = False
-                        q(StartEncoder())
+                        link = 'https://www.deezer.com/en/album/' + str(album)
+                        dlo = generateDownloadObject(dz=deezer_obj, link=link, bitrate=bitrate)
+                        dwl = deezerDownload(dz=deezer_obj, downloadObject=dlo, settings=settings_local)
+                        dwl.start()
                 if not new:
-                    logger.info('No new albums found today')
-
-            logger.info('Running audio conversion')'''
+                    logger.info('No new albums to add')
+            encode_files()
             wait_to_tomorrow()
 
 
@@ -160,7 +170,7 @@ def api_call_test(url, deezer_sesh, deezer_headers):
     return album_id_stripper(albums)
 
 
-def add_to_lib(id):
+def add_to_lib(id, check=False):
     with open('deemix_db/library.json') as json_file:
         lib = json.load(json_file)
         for entries in lib:

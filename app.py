@@ -16,7 +16,7 @@ log = logging.getLogger('werkzeug')
 log.disabled = True
 app.logger.disabled = True
 album_image = ''
-# DeemixAutoDowloader.Downloader()
+DeemixAutoDowloader.Downloader()
 
 
 class AlbumDisplay(Thread):

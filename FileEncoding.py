@@ -2,6 +2,7 @@ import os
 from shutil import copyfile
 import ffmpeg
 from pathlib import Path
+import re
 
 
 def encoder(elem, dir_name):
@@ -15,7 +16,7 @@ def encoder(elem, dir_name):
             Path(dir_name + "/../cd/" + file_path_no_name).mkdir(parents=True, exist_ok=True)
             Path(dir_name + "/../hi-res/" + file_path_no_name).mkdir(parents=True, exist_ok=True)
             copyfile(elem, dir_name + '/../hi-res/' + file_path_no_name + file_name_no_path)
-            cd_location = dir_name + "/../cd/" + file_path_no_name + file_name_no_path
+            cd_location = dir_name + "/../cd" + file_path_no_name + file_name_no_path
 
             if int(probe['streams'][0]['sample_rate']) >= 44100:
                 sample_rate = 44100
@@ -26,11 +27,27 @@ def encoder(elem, dir_name):
                 bit_rate = 16
             else:
                 bit_rate = probe['streams'][0]['bits_per_raw_sample']
-
+            pattern = '([^`]*)'
+            result = re.match(pattern, elem)
+            if result:
+                result = re.sub('`',  '', elem)
+                os.rename(rf'{elem}', rf'{result}')
+                elem = result
+                file_name_no_path = ''.join(elem.split('/')[-1])
+                cd_location = dir_name + "/../cd" + file_path_no_name + file_name_no_path
+            else:
+                print("Search unsuccessful.")
             os.system(
                 f'ffmpeg -i "{elem}" -acodec alac -ar {sample_rate} -sample_fmt s{bit_rate}p -vn  "{cd_location}"')
             os.system(f'rm "{elem}"')
         elif extension == 'flac':
+            pattern = '([^`]*)'
+            result = re.match(pattern, elem)
+            if result:
+                result = re.sub('`', '', elem)
+                os.rename(rf'{elem}', rf'{result}')
+                elem = result
+                file_path_no_extension = re.sub('`', '', file_path_no_extension)
             os.system(
                 f'ffmpeg -i "{elem}" -acodec alac -ar 44100 -sample_fmt s16p -vn  "{file_path_no_extension}m4a"')
             os.system(f'rm "{elem}"')
@@ -38,8 +55,8 @@ def encoder(elem, dir_name):
 
 def encode_files():
     dir_name = './music'
-    Path(dir_name + "/../hi-res ").mkdir(parents=True, exist_ok=True)
-    Path(dir_name + "/../cd").mkdir(parents=True, exist_ok=True)
+    '''Path(dir_name + "/../hi-res ").mkdir(parents=True, exist_ok=True)
+    Path(dir_name + "/../cd").mkdir(parents=True, exist_ok=True)'''
 
     list_of_files = list()
     for (dir_path, dir_names, filenames) in os.walk(dir_name):
@@ -47,3 +64,4 @@ def encode_files():
 
     for elem in list_of_files:
         encoder(elem, dir_name)
+    print("*****Finished Encoding*****")
