@@ -199,3 +199,4 @@ def wait_to_tomorrow():
     delta = tomorrow - datetime.now()
     logger.info(f'Check was completed at {datetime.now()} sleeping for {delta}')
     time.sleep(delta.seconds)
+
